@@ -9,8 +9,9 @@
 <body>
   <main>
     <h1>audio-companion</h1>
-    <p class="subtitle">Fase 1: tempo / pitch</p>
+    <p class="subtitle">Fase 1: tempo / pitch / cuantizado</p>
 
+    <h2 class="section-title">Cambiar tempo (todo el archivo parejo)</h2>
     <form id="tempo-form">
       <label>
         Archivo de audio
@@ -70,6 +71,57 @@
     <p id="status"></p>
     <audio id="result-player" controls hidden></audio>
     <a id="result-download" hidden download>Descargar resultado</a>
+
+    <hr class="divider">
+
+    <h2 class="section-title">Cuantizar (alinear voz a otro instrumento)</h2>
+    <p class="subtitle">
+      Subís el instrumento que marca el tempo (ej. piano) y la pista a
+      alinear (ej. voz). Cada ataque de la pista a alinear se estira o
+      comprime individualmente para caer en la grilla rítmica del
+      instrumento de referencia — no es solo cambiar el tempo parejo.
+    </p>
+
+    <form id="quantize-form">
+      <label>
+        Audio de referencia (marca el tempo, ej. piano)
+        <input type="file" id="q-reference" accept="audio/*" required>
+      </label>
+
+      <label>
+        Audio a alinear (ej. voz)
+        <input type="file" id="q-target" accept="audio/*" required>
+      </label>
+
+      <label>
+        Subdivisión de la grilla
+        <select id="q-subdivision">
+          <option value="1">Negras (por beat)</option>
+          <option value="2">Corcheas (1/8)</option>
+          <option value="4" selected>Semicorcheas (1/16)</option>
+          <option value="8">Fusas (1/32)</option>
+        </select>
+      </label>
+
+      <label>
+        Fuerza del cuantizado: <span id="q-strength-value">100%</span>
+        <input type="range" id="q-strength" min="0" max="100" step="5" value="100">
+      </label>
+
+      <label>
+        Formato de salida
+        <select id="q-output_format">
+          <option value="wav">WAV (sin pérdida)</option>
+          <option value="mp3">MP3</option>
+        </select>
+      </label>
+
+      <button type="submit" id="q-submit-btn">Cuantizar</button>
+    </form>
+
+    <p id="q-status"></p>
+    <audio id="q-result-player" controls hidden></audio>
+    <a id="q-result-download" hidden download>Descargar resultado</a>
   </main>
 
   <button id="chat-toggle" aria-label="Abrir asistente">💬</button>
@@ -87,6 +139,7 @@
   </div>
 
   <script src="app.js"></script>
+  <script src="quantize.js"></script>
   <script src="chat.js"></script>
 </body>
 </html>

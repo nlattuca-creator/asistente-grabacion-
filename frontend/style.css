@@ -27,7 +27,24 @@ main {
 }
 
 h1 { margin-bottom: 0; }
-.subtitle { color: var(--muted); margin-top: 0.25rem; }
+.subtitle { color: var(--muted); margin-top: 0.25rem; font-size: 0.9rem; }
+
+.section-title {
+  margin-top: 2rem;
+  margin-bottom: 0;
+  font-size: 1.1rem;
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 2.5rem 0 0;
+}
+
+input[type="range"] {
+  padding: 0;
+  accent-color: var(--accent);
+}
 
 form {
   display: flex;

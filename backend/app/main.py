@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
-from app.modules import assistant, compose, stems, tempo  # noqa: E402
+from app.modules import assistant, compose, quantize, stems, tempo  # noqa: E402
 
 app = FastAPI(title="audio-companion", version="0.1.0")
 
@@ -20,6 +20,7 @@ app.add_middleware(
 )
 
 app.include_router(tempo.router)
+app.include_router(quantize.router)
 app.include_router(stems.router)
 app.include_router(compose.router)
 app.include_router(assistant.router)

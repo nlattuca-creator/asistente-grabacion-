@@ -11,6 +11,12 @@ pensado para voz sola), le decís el tempo objetivo, y te devuelve el archivo
 re-temporizado **preservando el tono** (no es un simple "pitch up/down" al
 acelerar — es time-stretching real vía [Rubber Band](https://breakfastquay.com/rubberband/)).
 
+**Cuantizado (implementado):** alineá el timing de una pista (ej. voz) a la
+grilla rítmica de otra (ej. piano) — como el Flex Time + Quantize de Logic,
+pero enganchado a un archivo de referencia real. No estira todo parejo:
+detecta cada ataque de la voz y lo mueve individualmente al punto de grilla
+más cercano. Ver detalle abajo.
+
 **Fase 2 (planeada):** separación de stems (voz/instrumentos) sobre una mezcla,
 para poder ajustar niveles de cada pista por separado. Necesita un modelo tipo
 Demucs corriendo server-side — no anda bien en el browser.
@@ -37,6 +43,7 @@ audio-companion/
       main.py          entrypoint, monta los routers de cada módulo
       modules/
         tempo.py        Fase 1: tempo/pitch (rubberband + ffmpeg)
+        quantize.py      Cuantizado: alinea una pista a la grilla de otra (librosa + rubberband)
         stems.py         Fase 2: separación de stems (placeholder)
         compose.py       Fase 3: sugerencias con Claude (placeholder)
         assistant.py     Chat de Q&A general (Claude, sin analizar audio)
@@ -45,6 +52,7 @@ audio-companion/
   frontend/            Página web simple (HTML/JS vanilla, sin build step)
     index.html
     app.js              lógica del formulario de tempo
+    quantize.js          lógica del formulario de cuantizado
     chat.js              lógica del panel de chat flotante
     style.css
 ```
@@ -132,6 +140,42 @@ frontend, el botón "Detectar automáticamente" completa el campo BPM original
 con esto (queda editable — la detección puede fallar por "error de octava",
 detectando el doble o la mitad del tempo real, típico en cualquier algoritmo
 de beat tracking).
+
+## Cuantizado: alinear una pista a la grilla de otra
+
+`POST /api/quantize/align` — multipart form:
+- `reference`: audio que marca el tempo (ej. piano ya grabado).
+- `target`: audio a alinear (ej. voz).
+- `subdivision` (1-8, default 4): a qué subdivisión del beat cuantiza
+  (1 = negras, 2 = corcheas, 4 = semicorcheas, 8 = fusas).
+- `strength` (0-100, default 100): qué tan fuerte cuantiza. 100 = pega cada
+  ataque exactamente a la grilla. Valores más bajos lo acercan sin pegarlo
+  del todo (mezcla entre el timing original y el cuantizado), útil si 100%
+  suena robótico.
+- `output_format` (`wav` o `mp3`, default `wav`).
+
+Devuelve el `target` con el timing ajustado. Headers de respuesta:
+`X-Quantize-Segments` (cuántos tramos se procesaron) y `X-Quantize-Clamped`
+(cuántos de esos tramos necesitaban un estiramiento tan extremo que se
+limitó para no destruir el audio — si este número es alto, esos tramos
+puntuales van a sonar raros o no van a quedar perfectamente en grilla).
+
+**Cómo funciona:** detecta la grilla de beats del `reference` con
+`librosa.beat.beat_track`, detecta los "onsets" (ataques/sílabas) del
+`target` con `librosa.onset.onset_detect`, calcula para cada onset el punto
+de grilla más cercano, y estira/comprime individualmente cada segmento
+entre onsets (con Rubber Band, preservando el tono) para que caiga ahí.
+
+**Limitaciones a tener en cuenta:**
+- Procesa en mono. Si tu voz está grabada en estéreo, el resultado sale
+  mono — para maquetear no debería importar, pero no es un reemplazo de
+  Flex Time para el master final.
+- No soporta swing/triplets, solo subdivisiones rectas.
+- Si el `reference` no tiene un pulso rítmico claro (ej. una pista muy
+  ambient/rubato), la detección de grilla puede fallar o salir mal.
+- Tramos que necesitarían estirarse/comprimirse más de 4x (o menos de 0.25x)
+  se limitan a ese máximo en vez de fallar — mirá `X-Quantize-Clamped`.
+- Archivos de hasta 10 minutos y 100MB, hasta 400 segmentos detectados.
 
 ## Asistente de chat
 
