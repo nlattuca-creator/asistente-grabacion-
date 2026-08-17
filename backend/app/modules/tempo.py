@@ -11,6 +11,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
+import librosa
 from fastapi import APIRouter, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
@@ -33,6 +34,42 @@ def _run(cmd: list[str]) -> None:
 
 def _cleanup(work_dir: Path) -> None:
     shutil.rmtree(work_dir, ignore_errors=True)
+
+
+async def _save_and_normalize(file: UploadFile) -> tuple[Path, Path]:
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "Archivo vacío")
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "Archivo demasiado grande (máx 100MB)")
+
+    work_dir = Path(tempfile.mkdtemp(prefix="tempo_"))
+    src_ext = Path(file.filename or "input").suffix or ".bin"
+    src_path = work_dir / f"input{src_ext}"
+    src_path.write_bytes(raw)
+
+    normalized_wav = work_dir / "normalized.wav"
+    _run([
+        "ffmpeg", "-y", "-i", str(src_path),
+        "-ar", "44100", "-ac", "2",
+        str(normalized_wav),
+    ])
+    return work_dir, normalized_wav
+
+
+@router.post("/detect")
+async def detect_tempo(file: UploadFile):
+    work_dir, normalized_wav = await _save_and_normalize(file)
+    try:
+        y, sr = librosa.load(str(normalized_wav), sr=None, mono=True)
+        tempo = librosa.beat.beat_track(y=y, sr=sr)[0]
+        bpm = float(tempo[0]) if hasattr(tempo, "__len__") else float(tempo)
+    except Exception as exc:
+        raise HTTPException(422, f"No se pudo detectar el BPM: {exc}") from exc
+    finally:
+        _cleanup(work_dir)
+
+    return {"bpm": round(bpm, 1)}
 
 
 @router.post("/process")
@@ -61,23 +98,7 @@ async def process_tempo(
             f"tempo_ratio fuera de rango razonable ({MIN_RATIO}-{MAX_RATIO}): {tempo_ratio}",
         )
 
-    raw = await file.read()
-    if not raw:
-        raise HTTPException(400, "Archivo vacío")
-    if len(raw) > MAX_UPLOAD_BYTES:
-        raise HTTPException(413, "Archivo demasiado grande (máx 100MB)")
-
-    work_dir = Path(tempfile.mkdtemp(prefix="tempo_"))
-    src_ext = Path(file.filename or "input").suffix or ".bin"
-    src_path = work_dir / f"input{src_ext}"
-    src_path.write_bytes(raw)
-
-    normalized_wav = work_dir / "normalized.wav"
-    _run([
-        "ffmpeg", "-y", "-i", str(src_path),
-        "-ar", "44100", "-ac", "2",
-        str(normalized_wav),
-    ])
+    work_dir, normalized_wav = await _save_and_normalize(file)
 
     stretched_wav = work_dir / "stretched.wav"
     _run([

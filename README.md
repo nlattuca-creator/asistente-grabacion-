@@ -126,6 +126,13 @@ systemctl restart asistente-grabacion
 Devuelve el archivo procesado. El pitch se preserva automáticamente (eso es
 lo que diferencia esto de simplemente acelerar el archivo).
 
+`POST /api/tempo/detect` — multipart form con `file`. Devuelve
+`{"bpm": 120.2}`, el BPM estimado con [librosa](https://librosa.org/). En el
+frontend, el botón "Detectar automáticamente" completa el campo BPM original
+con esto (queda editable — la detección puede fallar por "error de octava",
+detectando el doble o la mitad del tempo real, típico en cualquier algoritmo
+de beat tracking).
+
 ## Asistente de chat
 
 1. `cp backend/.env.example backend/.env`

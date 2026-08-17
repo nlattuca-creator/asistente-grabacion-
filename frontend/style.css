@@ -87,6 +87,26 @@ button:disabled { opacity: 0.6; cursor: wait; }
 
 #status { color: var(--muted); min-height: 1.2em; }
 
+.bpm-detect-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.bpm-detect-row input { flex: 1; min-width: 0; }
+
+.bpm-detect-row button {
+  width: auto;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: -0.5rem 0 0;
+}
+
 audio { width: 100%; margin-top: 0.5rem; }
 
 #result-download {

@@ -39,8 +39,12 @@
       <div id="modo-bpm" class="modo-fields" hidden>
         <label>
           BPM original
-          <input type="number" id="bpm_from" step="0.1" min="1">
+          <span class="bpm-detect-row">
+            <input type="number" id="bpm_from" step="0.1" min="1">
+            <button type="button" id="detect-bpm-btn">Detectar automáticamente</button>
+          </span>
         </label>
+        <p id="detect-bpm-status" class="hint"></p>
         <label>
           BPM destino
           <input type="number" id="bpm_to" step="0.1" min="1">

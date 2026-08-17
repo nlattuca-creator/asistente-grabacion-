@@ -17,6 +17,41 @@ document.querySelectorAll('input[name="modo"]').forEach((radio) => {
   });
 });
 
+const detectBpmBtn = document.getElementById("detect-bpm-btn");
+const detectBpmStatus = document.getElementById("detect-bpm-status");
+
+detectBpmBtn.addEventListener("click", async () => {
+  const file = document.getElementById("file").files[0];
+  if (!file) {
+    detectBpmStatus.textContent = "Primero elegí un archivo de audio.";
+    return;
+  }
+
+  const apiBase = document.getElementById("api_base").value.replace(/\/$/, "");
+  const body = new FormData();
+  body.append("file", file);
+
+  detectBpmBtn.disabled = true;
+  detectBpmStatus.textContent = "Analizando…";
+
+  try {
+    const response = await fetch(`${apiBase}/api/tempo/detect`, {
+      method: "POST",
+      body,
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || `Error ${response.status}`);
+
+    document.getElementById("bpm_from").value = data.bpm;
+    detectBpmStatus.textContent = `Detectado: ${data.bpm} BPM (revisalo, la detección automática puede fallar, sobre todo por octava — el doble o la mitad del BPM real).`;
+  } catch (err) {
+    detectBpmStatus.textContent = `Error: ${err.message}`;
+  } finally {
+    detectBpmBtn.disabled = false;
+  }
+});
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
