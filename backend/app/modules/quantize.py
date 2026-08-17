@@ -14,17 +14,20 @@ Limitaciones del MVP:
 - Si no se detectan onsets en la pista a alinear, la devuelve sin cambios.
 """
 
+import io
+import json
 import shutil
 import subprocess
 import tempfile
 import uuid
+import zipfile
 from pathlib import Path
 
 import librosa
 import numpy as np
 import soundfile as sf
-from fastapi import APIRouter, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 from starlette.background import BackgroundTask
 
 router = APIRouter(prefix="/api/quantize", tags=["quantize"])
@@ -103,6 +106,72 @@ def _nearest_grid_point(t: float, grid: np.ndarray) -> float:
     return float(candidates[np.argmin(np.abs(candidates - t))])
 
 
+def _quantize_to_grid(
+    target_audio: np.ndarray, grid: np.ndarray, strength: float, work_dir: Path, prefix: str,
+) -> tuple[np.ndarray, int, int]:
+    """Alinea target_audio a la grilla. Devuelve (audio final, segmentos, cuántos se limitaron)."""
+    onset_frames = librosa.onset.onset_detect(
+        y=target_audio, sr=SR, units="frames", backtrack=True
+    )
+    onset_times = librosa.frames_to_time(onset_frames, sr=SR)
+    duration = len(target_audio) / SR
+
+    boundaries_orig = sorted(
+        {0.0, duration, *(float(t) for t in onset_times if 0 < t < duration)}
+    )
+
+    if len(boundaries_orig) - 1 > MAX_SEGMENTS:
+        raise HTTPException(
+            413,
+            f"'{prefix}': demasiados eventos detectados ({len(boundaries_orig) - 1}), "
+            f"máximo {MAX_SEGMENTS}. Probá con un audio más corto o más limpio.",
+        )
+
+    boundaries_target = [0.0]
+    for t in boundaries_orig[1:-1]:
+        nearest = _nearest_grid_point(t, grid)
+        snapped = t + (strength / 100.0) * (nearest - t)
+        snapped = max(snapped, boundaries_target[-1] + MIN_SEGMENT_SECONDS)
+        boundaries_target.append(snapped)
+    # el tramo final (despues del ultimo onset, tipicamente cola/silencio)
+    # no se cuantiza, mantiene su duracion original
+    last_orig_segment = boundaries_orig[-1] - boundaries_orig[-2]
+    boundaries_target.append(boundaries_target[-1] + last_orig_segment)
+
+    segments_out = []
+    clamped_count = 0
+    for i in range(len(boundaries_orig) - 1):
+        start_sample = int(boundaries_orig[i] * SR)
+        end_sample = int(boundaries_orig[i + 1] * SR)
+        seg = target_audio[start_sample:end_sample]
+        orig_dur = len(seg) / SR
+        target_dur = boundaries_target[i + 1] - boundaries_target[i]
+        if orig_dur <= 0 or target_dur <= 0 or len(seg) == 0:
+            continue
+
+        ratio = orig_dur / target_dur
+        ratio_clamped = min(max(ratio, MIN_RATIO), MAX_RATIO)
+        if ratio_clamped != ratio:
+            clamped_count += 1
+
+        if abs(ratio_clamped - 1.0) < 0.01:
+            segments_out.append(seg)
+            continue
+
+        seg_in_path = work_dir / f"{prefix}_seg_in_{i}.wav"
+        seg_out_path = work_dir / f"{prefix}_seg_out_{i}.wav"
+        sf.write(str(seg_in_path), seg, SR)
+        _run([
+            "rubberband", "--tempo", str(ratio_clamped), "-c", "6",
+            str(seg_in_path), str(seg_out_path),
+        ])
+        seg_out, _ = sf.read(str(seg_out_path), dtype="float32", always_2d=False)
+        segments_out.append(seg_out)
+
+    final_audio = np.concatenate(segments_out) if segments_out else target_audio
+    return final_audio, len(segments_out), clamped_count
+
+
 @router.post("/align")
 async def align(
     reference: UploadFile,
@@ -125,65 +194,9 @@ async def align(
 
         grid = _build_grid(ref_audio, subdivision)
 
-        onset_frames = librosa.onset.onset_detect(
-            y=target_audio, sr=SR, units="frames", backtrack=True
+        final_audio, n_segments, clamped_count = _quantize_to_grid(
+            target_audio, grid, strength, work_dir, "t"
         )
-        onset_times = librosa.frames_to_time(onset_frames, sr=SR)
-        duration = len(target_audio) / SR
-
-        boundaries_orig = sorted(
-            {0.0, duration, *(float(t) for t in onset_times if 0 < t < duration)}
-        )
-
-        if len(boundaries_orig) - 1 > MAX_SEGMENTS:
-            raise HTTPException(
-                413,
-                f"Demasiados eventos detectados ({len(boundaries_orig) - 1}), "
-                f"máximo {MAX_SEGMENTS}. Probá con un audio más corto o más limpio.",
-            )
-
-        boundaries_target = [0.0]
-        for t in boundaries_orig[1:-1]:
-            nearest = _nearest_grid_point(t, grid)
-            snapped = t + (strength / 100.0) * (nearest - t)
-            snapped = max(snapped, boundaries_target[-1] + MIN_SEGMENT_SECONDS)
-            boundaries_target.append(snapped)
-        # el tramo final (despues del ultimo onset, tipicamente cola/silencio)
-        # no se cuantiza, mantiene su duracion original
-        last_orig_segment = boundaries_orig[-1] - boundaries_orig[-2]
-        boundaries_target.append(boundaries_target[-1] + last_orig_segment)
-
-        segments_out = []
-        clamped_count = 0
-        for i in range(len(boundaries_orig) - 1):
-            start_sample = int(boundaries_orig[i] * SR)
-            end_sample = int(boundaries_orig[i + 1] * SR)
-            seg = target_audio[start_sample:end_sample]
-            orig_dur = len(seg) / SR
-            target_dur = boundaries_target[i + 1] - boundaries_target[i]
-            if orig_dur <= 0 or target_dur <= 0 or len(seg) == 0:
-                continue
-
-            ratio = orig_dur / target_dur
-            ratio_clamped = min(max(ratio, MIN_RATIO), MAX_RATIO)
-            if ratio_clamped != ratio:
-                clamped_count += 1
-
-            if abs(ratio_clamped - 1.0) < 0.01:
-                segments_out.append(seg)
-                continue
-
-            seg_in_path = work_dir / f"seg_in_{i}.wav"
-            seg_out_path = work_dir / f"seg_out_{i}.wav"
-            sf.write(str(seg_in_path), seg, SR)
-            _run([
-                "rubberband", "--tempo", str(ratio_clamped), "-c", "6",
-                str(seg_in_path), str(seg_out_path),
-            ])
-            seg_out, _ = sf.read(str(seg_out_path), dtype="float32", always_2d=False)
-            segments_out.append(seg_out)
-
-        final_audio = np.concatenate(segments_out) if segments_out else target_audio
         final_wav = work_dir / "final.wav"
         sf.write(str(final_wav), final_audio, SR)
 
@@ -206,9 +219,81 @@ async def align(
             filename=download_name,
             background=BackgroundTask(shutil.rmtree, work_dir, ignore_errors=True),
         )
-        response.headers["X-Quantize-Segments"] = str(len(segments_out))
+        response.headers["X-Quantize-Segments"] = str(n_segments)
         response.headers["X-Quantize-Clamped"] = str(clamped_count)
         return response
+    except Exception:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        raise
+
+
+@router.post("/align_session")
+async def align_session(
+    reference: UploadFile,
+    targets: list[UploadFile] = File(...),
+    subdivision: int = Form(1),
+    strength: float = Form(100.0),
+    output_format: str = Form("wav"),
+):
+    if output_format not in ("wav", "mp3"):
+        raise HTTPException(400, "output_format debe ser 'wav' o 'mp3'")
+    if not (1 <= subdivision <= 8):
+        raise HTTPException(400, "subdivision debe estar entre 1 y 8")
+    if not (0 <= strength <= 100):
+        raise HTTPException(400, "strength debe estar entre 0 y 100")
+    if not targets:
+        raise HTTPException(400, "Mandá al menos una pista para alinear")
+    if len(targets) > 8:
+        raise HTTPException(400, "Máximo 8 pistas por sesión")
+
+    work_dir = Path(tempfile.mkdtemp(prefix="session_"))
+    try:
+        ref_audio = await _load_normalized(reference, work_dir, "reference")
+        grid = _build_grid(ref_audio, subdivision)
+
+        report = []
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_STORED) as zf:
+            for idx, target in enumerate(targets):
+                stem = Path(target.filename or f"pista_{idx + 1}").stem
+                target_audio = await _load_normalized(target, work_dir, f"target_{idx}")
+
+                final_audio, n_segments, clamped_count = _quantize_to_grid(
+                    target_audio, grid, strength, work_dir, f"t{idx}"
+                )
+
+                final_wav = work_dir / f"out_{idx}.wav"
+                sf.write(str(final_wav), final_audio, SR)
+
+                if output_format == "mp3":
+                    out_path = work_dir / f"out_{idx}.mp3"
+                    _run([
+                        "ffmpeg", "-y", "-i", str(final_wav),
+                        "-codec:a", "libmp3lame", "-q:a", "2",
+                        str(out_path),
+                    ])
+                else:
+                    out_path = final_wav
+
+                entry_name = f"{idx + 1:02d}_{stem}_quantized.{output_format}"
+                zf.write(str(out_path), entry_name)
+                report.append({
+                    "file": entry_name, "segments": n_segments, "clamped": clamped_count,
+                })
+
+            zf.writestr("report.json", json.dumps(report, indent=2, ensure_ascii=False))
+
+        zip_buf.seek(0)
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+        return StreamingResponse(
+            zip_buf,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": 'attachment; filename="sesion_alineada.zip"',
+                "X-Session-Tracks": str(len(targets)),
+            },
+        )
     except Exception:
         shutil.rmtree(work_dir, ignore_errors=True)
         raise

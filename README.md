@@ -17,6 +17,14 @@ pero enganchado a un archivo de referencia real. No estira todo parejo:
 detecta cada ataque de la voz y lo mueve individualmente al punto de grilla
 más cercano. Ver detalle abajo.
 
+**Sesión multi-pista (implementado):** lo mismo que el cuantizado, pero
+para una sesión completa de una — una referencia (ej. piano) + varias
+pistas (ej. guitarra + voz) subidas juntas, alineadas todas contra la
+misma grilla en un solo request, devueltas en un ZIP listo para
+reimportar a Logic. Pensado para el caso real: grabaste piano, guitarra y
+voz por separado y la voz quedó fuera de tiempo — subís las tres juntas
+en vez de ir pista por pista. Ver detalle abajo.
+
 **Creador de batería (implementado, sin probar contra Claude real):**
 describís un estilo en texto libre + BPM, y te devuelve un ZIP con un MIDI
 (para usar en Drummer o tu kit en Logic, con tus propios sonidos) y un
@@ -49,7 +57,7 @@ audio-companion/
       main.py          entrypoint, monta los routers de cada módulo
       modules/
         tempo.py        Fase 1: tempo/pitch (rubberband + ffmpeg)
-        quantize.py      Cuantizado: alinea una pista a la grilla de otra (librosa + rubberband)
+        quantize.py      Cuantizado: alinea una pista a la grilla de otra, sola o en sesión (librosa + rubberband)
         beatmaker.py     Creador de batería: patrón (Claude) -> MIDI + preview sintetizado
         stems.py         Fase 2: separación de stems (placeholder)
         compose.py       Fase 3: sugerencias con Claude (placeholder)
@@ -59,9 +67,10 @@ audio-companion/
   frontend/            Página web simple (HTML/JS vanilla, sin build step)
     index.html
     app.js              lógica del formulario de tempo
-    quantize.js          lógica del formulario de cuantizado
+    quantize.js          lógica del formulario de cuantizado (1 pista)
+    session.js            lógica del formulario de sesión multi-pista
     beatmaker.js          lógica del formulario de batería
-    zip-lite.js           extrae una entrada de un ZIP sin comprimir (para el preview)
+    zip-lite.js           extrae una entrada de un ZIP sin comprimir (para los previews)
     chat.js              lógica del panel de chat flotante
     style.css
 ```
@@ -185,6 +194,34 @@ entre onsets (con Rubber Band, preservando el tono) para que caiga ahí.
 - Tramos que necesitarían estirarse/comprimirse más de 4x (o menos de 0.25x)
   se limitan a ese máximo en vez de fallar — mirá `X-Quantize-Clamped`.
 - Archivos de hasta 10 minutos y 100MB, hasta 400 segmentos detectados.
+
+## Sesión multi-pista: alinear varias pistas a la vez
+
+`POST /api/quantize/align_session` — multipart form:
+- `reference`: audio que marca el tempo (igual que en `/align`).
+- `targets`: una o más pistas a alinear (repetí el campo `targets` una vez
+  por archivo — así lo arma el `<input type="file" multiple>` del
+  frontend). Máximo 8 pistas por sesión.
+- `subdivision`, `strength`, `output_format`: iguales a `/align`, se
+  aplican igual a todas las pistas de la sesión.
+
+Devuelve un `.zip` con cada pista alineada (`01_<nombre>_quantized.wav`,
+`02_...`, etc., numeradas en el orden en que las subiste) más un
+`report.json` con `segments` y `clamped` por pista. Header
+`X-Session-Tracks` con la cantidad de pistas procesadas. El frontend
+extrae cada pista del ZIP (sin comprimir, mismo mecanismo que en
+batería — ver `zip-lite.js`) y las reproduce una por una para que puedas
+escuchar el resultado antes de bajar todo.
+
+**Por qué existe además de `/align`:** el caso real es "grabé piano,
+guitarra y voz por separado, la voz quedó fuera de tiempo" — con `/align`
+tendrías que subir voz-contra-piano y guitarra-contra-piano por separado,
+dos requests, dos descargas. Acá subís la referencia una vez y todas las
+pistas juntas, en un solo paso.
+
+Misma lógica y mismas limitaciones que `/align` (ver arriba), aplicada
+pista por pista contra una única grilla calculada una sola vez a partir
+del `reference`.
 
 ## Creador de batería
 
