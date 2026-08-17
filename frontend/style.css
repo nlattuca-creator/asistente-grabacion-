@@ -282,6 +282,95 @@ button:disabled { opacity: 0.55; cursor: wait; }
   margin: -0.5rem 0 0;
 }
 
+/* ---------- editor de waveform ---------- */
+
+.wave-editor {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.waveform-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.waveform-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.waveform-bpm {
+  margin: -0.15rem 0 0;
+}
+
+.wave-editor canvas {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  border: 1px solid var(--border);
+}
+
+.wave-track {
+  position: relative;
+  touch-action: none;
+}
+
+.wave-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  transform: translateX(-50%);
+  cursor: ew-resize;
+  z-index: 2;
+}
+
+.wave-marker::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: var(--accent);
+}
+
+.wave-marker-handle {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-elevated);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.wave-marker.dragging .wave-marker-handle {
+  background: var(--success);
+  transform: translateX(-50%) scale(1.15);
+}
+
+.wave-editor-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.wave-editor-actions button {
+  width: auto;
+  flex: 1;
+}
+
 /* ---------- results ---------- */
 
 .result-area {

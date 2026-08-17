@@ -146,8 +146,33 @@
             </select>
           </label>
 
-          <button type="submit" id="q-submit-btn" class="btn-primary">Cuantizar</button>
+          <button type="submit" id="q-submit-btn" class="btn-primary">Analizar</button>
         </form>
+
+        <div id="q-editor" class="wave-editor" hidden>
+          <p class="hint">
+            Arrastrá los puntos para corregir dónde cae cada ataque. La
+            marca finita gris es dónde estaba originalmente; el punto
+            arrastrable es a dónde se lo mueve.
+          </p>
+
+          <div class="waveform-panel">
+            <div class="waveform-label">Referencia (grilla)</div>
+            <canvas id="q-wave-reference" data-height="70"></canvas>
+          </div>
+
+          <div class="waveform-panel">
+            <div class="waveform-label">A alinear — arrastrá los puntos</div>
+            <div class="wave-track" id="q-wave-target-track">
+              <canvas id="q-wave-target" data-height="90"></canvas>
+            </div>
+          </div>
+
+          <div class="wave-editor-actions">
+            <button type="button" id="q-reset-btn">Restablecer sugerencias</button>
+            <button type="button" id="q-apply-btn" class="btn-primary">Aplicar cambios</button>
+          </div>
+        </div>
 
         <div class="result-area">
           <p id="q-status" class="status-line"></p>
@@ -202,8 +227,28 @@
             </select>
           </label>
 
-          <button type="submit" id="s-submit-btn" class="btn-primary">Alinear sesión</button>
+          <button type="submit" id="s-submit-btn" class="btn-primary">Analizar</button>
         </form>
+
+        <div id="s-editor" class="wave-editor" hidden>
+          <p class="hint">
+            Arrastrá los puntos de cada pista para corregir dónde cae cada
+            ataque. La marca finita gris es dónde estaba originalmente; el
+            punto arrastrable es a dónde se lo mueve.
+          </p>
+
+          <div class="waveform-panel">
+            <div class="waveform-label">Referencia (grilla)</div>
+            <canvas id="s-wave-reference" data-height="70"></canvas>
+          </div>
+
+          <div id="s-tracks-container"></div>
+
+          <div class="wave-editor-actions">
+            <button type="button" id="s-reset-btn">Restablecer sugerencias</button>
+            <button type="button" id="s-apply-btn" class="btn-primary">Aplicar cambios</button>
+          </div>
+        </div>
 
         <div class="result-area">
           <p id="s-status" class="status-line"></p>
@@ -277,6 +322,7 @@
 
   <script src="tabs.js"></script>
   <script src="app.js"></script>
+  <script src="waveform.js"></script>
   <script src="quantize.js"></script>
   <script src="zip-lite.js"></script>
   <script src="session.js"></script>

@@ -11,19 +11,27 @@ pensado para voz sola), le decís el tempo objetivo, y te devuelve el archivo
 re-temporizado **preservando el tono** (no es un simple "pitch up/down" al
 acelerar — es time-stretching real vía [Rubber Band](https://breakfastquay.com/rubberband/)).
 
-**Cuantizado (implementado):** alineá el timing de una pista (ej. voz) a la
-grilla rítmica de otra (ej. piano) — como el Flex Time + Quantize de Logic,
-pero enganchado a un archivo de referencia real. No estira todo parejo:
-detecta cada ataque de la voz y lo mueve individualmente al punto de grilla
-más cercano. Ver detalle abajo.
+**Cuantizado (implementado, con editor visual):** alineá el timing de una
+pista (ej. voz) a la grilla rítmica de otra (ej. piano) — como el Flex
+Time + Quantize de Logic, pero enganchado a un archivo de referencia
+real. No estira todo parejo: detecta cada ataque y lo mueve
+individualmente al punto de grilla más cercano. Antes de aplicar nada,
+ves las **waveforms de verdad** (referencia con la grilla marcada, pista
+a alinear con cada ataque) y podés **arrastrar cada punto a mano** si la
+sugerencia automática no te convence — ahí sí aplicás y bajás el
+resultado. Ver detalle abajo.
 
-**Sesión multi-pista (implementado):** lo mismo que el cuantizado, pero
-para una sesión completa de una — una referencia (ej. piano) + varias
-pistas (ej. guitarra + voz) subidas juntas, alineadas todas contra la
-misma grilla en un solo request, devueltas en un ZIP listo para
-reimportar a Logic. Pensado para el caso real: grabaste piano, guitarra y
-voz por separado y la voz quedó fuera de tiempo — subís las tres juntas
-en vez de ir pista por pista. Ver detalle abajo.
+**Sesión multi-pista (implementado, con el mismo editor visual):** lo
+mismo que el cuantizado, pero para una sesión completa de una — una
+referencia (ej. piano) + varias pistas (ej. guitarra + voz) subidas
+juntas, cada una con su propia waveform y sus propios puntos
+arrastrables, alineadas todas contra la misma grilla, devueltas en un
+ZIP listo para reimportar a Logic. También detecta el **BPM propio de
+cada pista** y lo compara contra la referencia — si una pista viene
+tocada/cantada a un tempo global distinto (no solo desvíos puntuales),
+te avisa. Pensado para el caso real: grabaste piano, guitarra y voz por
+separado y la voz quedó fuera de tiempo — subís las tres juntas en vez de
+ir pista por pista. Ver detalle abajo.
 
 **Creador de batería (implementado, sin probar contra Claude real):**
 describís un estilo en texto libre + BPM, y te devuelve un ZIP con un MIDI
@@ -78,12 +86,14 @@ audio-companion/
     .env.example
   frontend/            Página web simple (HTML/JS vanilla, sin build step)
     index.html
-    app.js              lógica del formulario de tempo
-    quantize.js          lógica del formulario de cuantizado (1 pista)
-    session.js            lógica del formulario de sesión multi-pista
-    beatmaker.js          lógica del formulario de batería
-    zip-lite.js           extrae una entrada de un ZIP sin comprimir (para los previews)
-    chat.js              lógica del panel de chat flotante
+    tabs.js              navegación por pestañas + panel de configuración
+    app.js               lógica del formulario de tempo
+    waveform.js           decodifica audio y dibuja waveforms + marcadores arrastrables (Web Audio API + canvas)
+    quantize.js           lógica de "Cuantizar": analizar -> editar puntos -> aplicar (1 pista)
+    session.js             lógica de "Sesión": igual pero con N pistas a la vez
+    beatmaker.js           lógica del formulario de batería
+    zip-lite.js             extrae una entrada de un ZIP sin comprimir (para los previews)
+    chat.js               lógica del panel de chat flotante
     style.css
 ```
 
@@ -173,6 +183,39 @@ de beat tracking).
 
 ## Cuantizado: alinear una pista a la grilla de otra
 
+El frontend usa el flujo editable (`/analyze` + `/render`, ver abajo). El
+endpoint `/align` de un solo paso sigue existiendo para uso directo por
+API/scripts, sin el paso intermedio de corrección manual.
+
+### Flujo editable (lo que usa la UI)
+
+`POST /api/quantize/analyze` — multipart form: `reference`, `target`,
+`subdivision`, `strength`. Detecta la grilla y los onsets, y devuelve
+**sugerencias sin tocar el audio todavía**:
+```json
+{
+  "duration": 12.3,
+  "events": [{"orig_time": 1.5, "suggested_time": 1.44}, ...],
+  "grid": [0.0, 0.6, 1.2, ...]
+}
+```
+El frontend decodifica `reference` y `target` en el browser (Web Audio
+API, nada viaja al server solo para dibujar) y muestra dos waveforms: la
+referencia con la grilla marcada, y la pista a alinear con un punto
+arrastrable por cada evento — la marca gris fija es la posición original,
+el punto de color es a dónde se lo mueve. Podés arrastrar cualquiera a
+mano (con el mouse, `pointer events`) antes de aplicar nada.
+
+`POST /api/quantize/render` — multipart form: `target`, `events` (JSON:
+`[{"orig_time":.., "target_time":..}, ...]` — los mismos eventos de
+`/analyze`, tal cual o con los `target_time` que el usuario corrigió a
+mano), `output_format`. Renderiza y devuelve el audio final, con los
+mismos headers `X-Quantize-Segments`/`X-Quantize-Clamped` que `/align`.
+No necesita `reference` de nuevo — los tiempos finales ya vienen
+decididos.
+
+### Endpoint directo (sin edición manual)
+
 `POST /api/quantize/align` — multipart form:
 - `reference`: audio que marca el tempo (ej. piano ya grabado).
 - `target`: audio a alinear (ej. voz).
@@ -208,6 +251,45 @@ entre onsets (con Rubber Band, preservando el tono) para que caiga ahí.
 - Archivos de hasta 10 minutos y 100MB, hasta 400 segmentos detectados.
 
 ## Sesión multi-pista: alinear varias pistas a la vez
+
+Mismo patrón que el cuantizado de una pista: el frontend usa el flujo
+editable (`analyze_session` + `render_session`); `align_session` es el
+endpoint directo de un solo paso.
+
+### Flujo editable (lo que usa la UI)
+
+`POST /api/quantize/analyze_session` — multipart form: `reference`,
+`targets` (una o más, repetí el campo por archivo), `subdivision`,
+`strength`. Devuelve:
+```json
+{
+  "grid": [0.0, 0.6, ...],
+  "reference_bpm": 99.4,
+  "tracks": [
+    {"filename": "voz.wav", "duration": 4.0, "detected_bpm": 0.0,
+     "events": [{"orig_time":.., "suggested_time":..}, ...]},
+    {"filename": "guitarra.wav", "duration": 4.0, "detected_bpm": 95.7,
+     "events": [...]}
+  ]
+}
+```
+`detected_bpm` es el tempo global propio de esa pista (mismo método que
+`/api/tempo/detect`), aparte de los eventos puntuales — si una pista
+viene tocada a un tempo distinto de punta a punta (no solo desvíos
+sueltos), esto lo muestra. Puede dar `0.0` si la pista no tiene un pulso
+rítmico claro de por sí (típico en voz sola sin acompañamiento) — no es
+un error, el cuantizado por ataques funciona igual, simplemente no hay un
+"tempo global" que reportar. El frontend muestra una waveform con puntos
+arrastrables por cada pista, más la comparación de BPM contra la
+referencia.
+
+`POST /api/quantize/render_session` — multipart form: `targets` (mismo
+orden que en el analyze), `events` (JSON: **un array de eventos por cada
+pista**, en el mismo orden que `targets` — `[[{"orig_time":..,
+"target_time":..}, ...], [...]]`), `output_format`. Devuelve el mismo
+`.zip` + `report.json` que `align_session`.
+
+### Endpoint directo (sin edición manual)
 
 `POST /api/quantize/align_session` — multipart form:
 - `reference`: audio que marca el tempo (igual que en `/align`).
