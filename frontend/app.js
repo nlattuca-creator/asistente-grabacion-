@@ -1,3 +1,8 @@
+const apiBaseInput = document.getElementById("api_base");
+if (!apiBaseInput.value && location.protocol === "file:") {
+  apiBaseInput.value = "http://localhost:8000";
+}
+
 const form = document.getElementById("tempo-form");
 const statusEl = document.getElementById("status");
 const player = document.getElementById("result-player");

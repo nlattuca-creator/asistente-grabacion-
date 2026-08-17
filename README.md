@@ -67,9 +67,52 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-Frontend: abrir `frontend/index.html` directamente en el browser (apunta a
-`http://localhost:8000` por default), o servirlo con cualquier server
-estático.
+Frontend: el backend ya sirve `frontend/` en `/` (probá `http://localhost:8000`
+directo). Si preferís abrir `frontend/index.html` como archivo local aparte,
+el campo "URL del backend" se completa solo con `http://localhost:8000`.
+
+## Deploy en un VPS (Ubuntu/Debian)
+
+```bash
+ssh root@TU_IP
+
+apt update && apt install -y ffmpeg rubberband-cli python3-venv git
+
+mkdir -p /opt && cd /opt
+git clone https://github.com/nlattuca-creator/asistente-grabacion- asistente-grabacion
+cd asistente-grabacion/backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+
+# (opcional, para el chat) cp .env.example .env && editar con la API key
+
+cp /opt/asistente-grabacion/deploy/asistente-grabacion.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now asistente-grabacion
+systemctl status asistente-grabacion   # debe decir "active (running)"
+```
+
+Abrí el puerto 8000 si el firewall lo bloquea:
+
+```bash
+ufw allow 8000/tcp   # si usás ufw
+```
+
+Si el VPS es Vultr y el puerto sigue sin responder desde afuera después de
+esto, revisá también el **Firewall Group** del panel de Vultr (es un
+firewall aparte, a nivel de red, que puede estar bloqueando el puerto aunque
+`ufw` lo permita).
+
+Con el servicio corriendo, entrás directo a `http://TU_IP:8000`.
+
+**Para actualizar** después de que suba cambios nuevos al repo:
+
+```bash
+cd /opt/asistente-grabacion
+git pull
+backend/.venv/bin/pip install -r backend/requirements.txt   # solo si cambió requirements.txt
+systemctl restart asistente-grabacion
+```
 
 ## Módulo 1: tempo/pitch
 
