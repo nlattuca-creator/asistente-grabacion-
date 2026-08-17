@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>audio-companion</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>audio-companion</h1>
+    <p class="subtitle">Fase 1: tempo / pitch</p>
+
+    <form id="tempo-form">
+      <label>
+        Archivo de audio
+        <input type="file" id="file" accept="audio/*" required>
+      </label>
+
+      <fieldset>
+        <legend>¿Cómo definís el cambio de tempo?</legend>
+        <label class="radio">
+          <input type="radio" name="modo" value="ratio" checked>
+          Porcentaje / ratio directo
+        </label>
+        <label class="radio">
+          <input type="radio" name="modo" value="bpm">
+          BPM origen → BPM destino
+        </label>
+      </fieldset>
+
+      <div id="modo-ratio" class="modo-fields">
+        <label>
+          Ratio de tempo (1.0 = igual, 1.15 = 15% más rápido, 0.9 = 10% más lento)
+          <input type="number" id="tempo_ratio" step="0.01" min="0.25" max="4" value="1.0">
+        </label>
+      </div>
+
+      <div id="modo-bpm" class="modo-fields" hidden>
+        <label>
+          BPM original
+          <input type="number" id="bpm_from" step="0.1" min="1">
+        </label>
+        <label>
+          BPM destino
+          <input type="number" id="bpm_to" step="0.1" min="1">
+        </label>
+      </div>
+
+      <label>
+        Formato de salida
+        <select id="output_format">
+          <option value="wav">WAV (sin pérdida)</option>
+          <option value="mp3">MP3</option>
+        </select>
+      </label>
+
+      <label>
+        URL del backend
+        <input type="text" id="api_base" value="http://localhost:8000">
+      </label>
+
+      <button type="submit" id="submit-btn">Procesar</button>
+    </form>
+
+    <p id="status"></p>
+    <audio id="result-player" controls hidden></audio>
+    <a id="result-download" hidden download>Descargar resultado</a>
+  </main>
+
+  <button id="chat-toggle" aria-label="Abrir asistente">💬</button>
+
+  <div id="chat-panel" hidden>
+    <header>
+      <span>Asistente (Logic Pro / producción)</span>
+      <button id="chat-close" aria-label="Cerrar">✕</button>
+    </header>
+    <div id="chat-messages"></div>
+    <form id="chat-form">
+      <input type="text" id="chat-input" placeholder="Preguntá algo, ej: ¿cómo agrupo pistas?" autocomplete="off">
+      <button type="submit">Enviar</button>
+    </form>
+  </div>
+
+  <script src="app.js"></script>
+  <script src="chat.js"></script>
+</body>
+</html>
