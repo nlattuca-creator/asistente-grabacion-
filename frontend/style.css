@@ -66,14 +66,17 @@ label.radio {
   gap: 0.5rem;
 }
 
-input, select {
+input, select, textarea {
   background: var(--field-bg);
   border: 1px solid var(--border);
   color: var(--fg);
   padding: 0.6rem;
   border-radius: 8px;
   font-size: 1rem;
+  font-family: inherit;
 }
+
+textarea { resize: vertical; }
 
 fieldset {
   border: 1px solid var(--border);

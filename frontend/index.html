@@ -9,7 +9,7 @@
 <body>
   <main>
     <h1>audio-companion</h1>
-    <p class="subtitle">Fase 1: tempo / pitch / cuantizado</p>
+    <p class="subtitle">Fase 1: tempo / pitch / cuantizado / batería</p>
 
     <h2 class="section-title">Cambiar tempo (todo el archivo parejo)</h2>
     <form id="tempo-form">
@@ -122,6 +122,44 @@
     <p id="q-status"></p>
     <audio id="q-result-player" controls hidden></audio>
     <a id="q-result-download" hidden download>Descargar resultado</a>
+
+    <hr class="divider">
+
+    <h2 class="section-title">Crear batería</h2>
+    <p class="subtitle">
+      Describí el estilo, decile el BPM, y te devuelve un ZIP con un MIDI
+      (para arrastrar a Drummer o a tu kit en Logic y usar tus propios
+      sonidos — ese es el archivo que realmente vas a usar) y un preview en
+      audio sintetizado acá mismo, solo para escuchar la idea rápido.
+    </p>
+
+    <form id="beat-form">
+      <label>
+        Estilo (texto libre)
+        <textarea id="b-style" rows="3" placeholder="ej: trap oscuro con hihats con rolls, o boom bap con swing y kick sincopado" required></textarea>
+      </label>
+
+      <label>
+        BPM
+        <span class="bpm-detect-row">
+          <input type="number" id="b-bpm" step="0.1" min="40" max="240" value="120" required>
+          <button type="button" id="b-detect-bpm-btn">Detectar de un audio</button>
+        </span>
+      </label>
+      <input type="file" id="b-bpm-reference" accept="audio/*" hidden>
+      <p id="b-detect-bpm-status" class="hint"></p>
+
+      <label>
+        Compases
+        <input type="number" id="b-bars" min="1" max="8" value="4">
+      </label>
+
+      <button type="submit" id="b-submit-btn">Generar batería</button>
+    </form>
+
+    <p id="b-status"></p>
+    <audio id="b-result-player" controls hidden></audio>
+    <a id="b-result-download" hidden download>Descargar ZIP (MIDI + preview)</a>
   </main>
 
   <button id="chat-toggle" aria-label="Abrir asistente">💬</button>
@@ -140,6 +178,8 @@
 
   <script src="app.js"></script>
   <script src="quantize.js"></script>
+  <script src="zip-lite.js"></script>
+  <script src="beatmaker.js"></script>
   <script src="chat.js"></script>
 </body>
 </html>

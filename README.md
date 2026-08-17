@@ -17,6 +17,12 @@ pero enganchado a un archivo de referencia real. No estira todo parejo:
 detecta cada ataque de la voz y lo mueve individualmente al punto de grilla
 más cercano. Ver detalle abajo.
 
+**Creador de batería (implementado, sin probar contra Claude real):**
+describís un estilo en texto libre + BPM, y te devuelve un ZIP con un MIDI
+(para usar en Drummer o tu kit en Logic, con tus propios sonidos) y un
+preview en audio sintetizado acá mismo, solo para escuchar la idea. Ver
+detalle abajo.
+
 **Fase 2 (planeada):** separación de stems (voz/instrumentos) sobre una mezcla,
 para poder ajustar niveles de cada pista por separado. Necesita un modelo tipo
 Demucs corriendo server-side — no anda bien en el browser.
@@ -44,6 +50,7 @@ audio-companion/
       modules/
         tempo.py        Fase 1: tempo/pitch (rubberband + ffmpeg)
         quantize.py      Cuantizado: alinea una pista a la grilla de otra (librosa + rubberband)
+        beatmaker.py     Creador de batería: patrón (Claude) -> MIDI + preview sintetizado
         stems.py         Fase 2: separación de stems (placeholder)
         compose.py       Fase 3: sugerencias con Claude (placeholder)
         assistant.py     Chat de Q&A general (Claude, sin analizar audio)
@@ -53,6 +60,8 @@ audio-companion/
     index.html
     app.js              lógica del formulario de tempo
     quantize.js          lógica del formulario de cuantizado
+    beatmaker.js          lógica del formulario de batería
+    zip-lite.js           extrae una entrada de un ZIP sin comprimir (para el preview)
     chat.js              lógica del panel de chat flotante
     style.css
 ```
@@ -176,6 +185,42 @@ entre onsets (con Rubber Band, preservando el tono) para que caiga ahí.
 - Tramos que necesitarían estirarse/comprimirse más de 4x (o menos de 0.25x)
   se limitan a ese máximo en vez de fallar — mirá `X-Quantize-Clamped`.
 - Archivos de hasta 10 minutos y 100MB, hasta 400 segmentos detectados.
+
+## Creador de batería
+
+`POST /api/beatmaker/generate` — multipart form:
+- `style`: descripción libre del estilo (ej. "trap oscuro con hihats con
+  rolls", "boom bap con swing", "reggaetón"). En español o inglés, lo que
+  sea.
+- `bpm` (40-240).
+- `bars` (1-8, default 4).
+
+Devuelve un `.zip` con:
+- `pattern.mid` — el archivo para usar de verdad: arrastralo a un track de
+  Drummer o a tu kit de batería en Logic y sonará con tus propios sonidos.
+  Mapeo General MIDI en canal 10: kick=36, snare=38, hihat cerrado=42,
+  hihat abierto=46, clap=39.
+- `preview.wav` — render rápido con sonidos sintetizados en el momento (no
+  es calidad de estudio), solo para escuchar la idea sin abrir Logic. El
+  frontend lo reproduce automáticamente apenas termina de generar.
+- `pattern.json` — el patrón crudo (qué instrumento suena en qué paso, con
+  qué velocidad), por transparencia.
+
+**Cómo funciona:** Claude genera UN patrón de 1 compás (16 pasos,
+resolución de semicorchea) en JSON según el estilo pedido, y ese mismo
+patrón se repite durante los `bars` compases (sin variación entre
+compases ni fills — es un loop, no un arreglo completo). Si Claude no
+devuelve JSON válido, se reintenta una vez antes de fallar.
+
+**Limitaciones a tener en cuenta:**
+- Patrón de 1 compás repetido, no hay variación/fills entre compases
+  todavía.
+- Solo 5 elementos: kick, snare, hihat cerrado, hihat abierto, clap — sin
+  toms, crashes, percusión latina, etc.
+- El preview es una síntesis muy simple (ruido filtrado + osciladores),
+  pensada para dar una idea del groove, no para usar como sonido final.
+- Necesita la misma `ANTHROPIC_API_KEY` que el asistente de chat (ver
+  abajo).
 
 ## Asistente de chat
 
