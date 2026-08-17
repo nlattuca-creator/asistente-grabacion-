@@ -127,27 +127,31 @@
 
     <h2 class="section-title">Crear batería</h2>
     <p class="subtitle">
-      Describí el estilo, decile el BPM, y te devuelve un ZIP con un MIDI
-      (para arrastrar a Drummer o a tu kit en Logic y usar tus propios
-      sonidos — ese es el archivo que realmente vas a usar) y un preview en
-      audio sintetizado acá mismo, solo para escuchar la idea rápido.
+      Describí el estilo y (recomendado) subí la canción tal como va hasta
+      ahora — así Claude no genera el patrón a ciegas: le sacamos tempo,
+      tonalidad aproximada y duración del audio real antes de pedirle la
+      batería. Te devuelve un ZIP con un MIDI (para arrastrar a Drummer o a
+      tu kit en Logic y usar tus propios sonidos — ese es el archivo que
+      realmente vas a usar) y un preview en audio sintetizado acá mismo,
+      solo para escuchar la idea rápido.
     </p>
 
     <form id="beat-form">
+      <label>
+        Canción de referencia (opcional, pero recomendado)
+        <input type="file" id="b-reference" accept="audio/*">
+      </label>
+      <p id="b-reference-status" class="hint"></p>
+
       <label>
         Estilo (texto libre)
         <textarea id="b-style" rows="3" placeholder="ej: trap oscuro con hihats con rolls, o boom bap con swing y kick sincopado" required></textarea>
       </label>
 
       <label>
-        BPM
-        <span class="bpm-detect-row">
-          <input type="number" id="b-bpm" step="0.1" min="40" max="240" value="120" required>
-          <button type="button" id="b-detect-bpm-btn">Detectar de un audio</button>
-        </span>
+        BPM (se completa solo si subiste una canción de referencia; corregilo si hace falta)
+        <input type="number" id="b-bpm" step="0.1" min="40" max="240">
       </label>
-      <input type="file" id="b-bpm-reference" accept="audio/*" hidden>
-      <p id="b-detect-bpm-status" class="hint"></p>
 
       <label>
         Compases

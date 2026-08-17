@@ -12,13 +12,18 @@ Claude. Devuelve un ZIP con:
 import io
 import json
 import os
+import shutil
+import subprocess
+import tempfile
 import zipfile
+from pathlib import Path
 
+import librosa
 import mido
 import numpy as np
 import soundfile as sf
 from anthropic import Anthropic, APIError
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from scipy.signal import butter, lfilter
 
@@ -34,12 +39,20 @@ MIN_BPM = 40
 MAX_BPM = 240
 MIN_BARS = 1
 MAX_BARS = 8
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100MB
+MAX_REFERENCE_SECONDS = 10 * 60
+
+_KEY_PROFILE_MAJOR = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
+_KEY_PROFILE_MINOR = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+_NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 SYSTEM_PROMPT = """Sos un programador de baterías profesional. Te dan un \
-estilo musical (texto libre, puede estar en español) y un tempo (BPM), y \
-devolvés UN patrón de batería de 1 compás en 4/4, 16 pasos (resolución de \
-semicorchea), como JSON estricto — sin texto adicional, sin explicaciones, \
-sin backticks de markdown, solo el JSON.
+estilo musical (texto libre, puede estar en español), un tempo (BPM) y, a \
+veces, contexto extra sacado de la canción real sobre la que va a sonar \
+esta batería (tonalidad, duración). Devolvés UN patrón de batería de 1 \
+compás en 4/4, 16 pasos (resolución de semicorchea), como JSON estricto — \
+sin texto adicional, sin explicaciones, sin backticks de markdown, solo el \
+JSON.
 
 Formato exacto de salida:
 {
@@ -93,7 +106,57 @@ def _validate_pattern(raw: dict) -> dict:
     return pattern
 
 
-def _call_claude_for_pattern(style: str, bpm: float) -> dict:
+def _estimate_key(y: np.ndarray, sr: int) -> str:
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr).mean(axis=1)
+    best_score, best_key = -np.inf, None
+    for i in range(12):
+        major_score = np.corrcoef(chroma, np.roll(_KEY_PROFILE_MAJOR, i))[0, 1]
+        minor_score = np.corrcoef(chroma, np.roll(_KEY_PROFILE_MINOR, i))[0, 1]
+        if major_score > best_score:
+            best_score, best_key = major_score, f"{_NOTE_NAMES[i]} mayor"
+        if minor_score > best_score:
+            best_score, best_key = minor_score, f"{_NOTE_NAMES[i]} menor"
+    return best_key
+
+
+async def _analyze_reference(file: UploadFile) -> dict:
+    """Le saca BPM, tonalidad estimada y duración a la canción real, para
+    darle contexto a Claude en vez de generar el patrón a ciegas."""
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "Archivo de referencia vacío")
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "Archivo de referencia demasiado grande (máx 100MB)")
+
+    work_dir = Path(tempfile.mkdtemp(prefix="beatref_"))
+    try:
+        src_ext = Path(file.filename or "reference").suffix or ".bin"
+        src_path = work_dir / f"reference{src_ext}"
+        src_path.write_bytes(raw)
+
+        norm_path = work_dir / "reference_norm.wav"
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-i", str(src_path), "-ar", str(SR), "-ac", "1", str(norm_path)],
+            capture_output=True, text=True, timeout=300,
+        )
+        if result.returncode != 0:
+            raise HTTPException(422, f"No se pudo leer el audio de referencia: {result.stderr.strip()[-500:]}")
+
+        y, sr = sf.read(str(norm_path), dtype="float32", always_2d=False)
+        duration = len(y) / sr
+        if duration > MAX_REFERENCE_SECONDS:
+            raise HTTPException(413, f"Audio de referencia demasiado largo (máx {MAX_REFERENCE_SECONDS // 60} min)")
+
+        tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+        detected_bpm = float(tempo[0]) if hasattr(tempo, "__len__") else float(tempo)
+        key = _estimate_key(y, sr)
+
+        return {"bpm": round(detected_bpm, 1), "key": key, "duration": round(duration, 1)}
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
+def _call_claude_for_pattern(style: str, bpm: float, context: dict | None = None) -> dict:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise HTTPException(
@@ -102,7 +165,16 @@ def _call_claude_for_pattern(style: str, bpm: float) -> dict:
         )
     client = Anthropic(api_key=api_key)
 
-    user_prompt = f"Estilo: {style}\nBPM: {bpm}"
+    context_line = ""
+    if context:
+        context_line = (
+            f"\nContexto de la canción real (detectado automáticamente del audio que subió el "
+            f"usuario): tonalidad estimada {context['key']} (aproximada, puede fallar), "
+            f"duración {context['duration']}s. Generá el patrón pensando en que va a sonar "
+            f"junto a esta canción."
+        )
+
+    user_prompt = f"Estilo: {style}\nBPM: {bpm}{context_line}"
     last_error = None
     for attempt in range(2):
         try:
@@ -122,7 +194,7 @@ def _call_claude_for_pattern(style: str, bpm: float) -> dict:
         except (json.JSONDecodeError, ValueError) as exc:
             last_error = exc
             user_prompt = (
-                f"Estilo: {style}\nBPM: {bpm}\n\n"
+                f"Estilo: {style}\nBPM: {bpm}{context_line}\n\n"
                 f"Tu respuesta anterior no era JSON válido con el formato pedido "
                 f"({exc}). Devolvé SOLO el JSON, sin texto adicional."
             )
@@ -246,17 +318,27 @@ def _render_preview(pattern: dict, bpm: float, bars: int) -> np.ndarray:
 @router.post("/generate")
 async def generate(
     style: str = Form(...),
-    bpm: float = Form(...),
+    bpm: float | None = Form(None),
     bars: int = Form(4),
+    reference: UploadFile | None = File(None),
 ):
     if not style.strip():
         raise HTTPException(400, "Describí el estilo de batería que querés")
-    if not (MIN_BPM <= bpm <= MAX_BPM):
-        raise HTTPException(400, f"bpm fuera de rango ({MIN_BPM}-{MAX_BPM})")
+    if bpm is None and reference is None:
+        raise HTTPException(400, "Mandá bpm, o un audio de referencia para detectarlo")
     if not (MIN_BARS <= bars <= MAX_BARS):
         raise HTTPException(400, f"bars fuera de rango ({MIN_BARS}-{MAX_BARS})")
 
-    pattern = _call_claude_for_pattern(style.strip(), bpm)
+    context = None
+    if reference is not None:
+        context = await _analyze_reference(reference)
+        if bpm is None:
+            bpm = context["bpm"]
+
+    if not (MIN_BPM <= bpm <= MAX_BPM):
+        raise HTTPException(400, f"bpm fuera de rango ({MIN_BPM}-{MAX_BPM})")
+
+    pattern = _call_claude_for_pattern(style.strip(), bpm, context)
 
     midi_bytes = _build_midi(pattern, bpm, bars)
 
@@ -276,8 +358,8 @@ async def generate(
         zf.writestr("pattern.json", json.dumps(pattern, indent=2, ensure_ascii=False))
     zip_buf.seek(0)
 
-    return StreamingResponse(
-        zip_buf,
-        media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="bateria.zip"'},
-    )
+    headers = {"Content-Disposition": 'attachment; filename="bateria.zip"', "X-Beatmaker-Bpm": str(bpm)}
+    if context:
+        headers["X-Beatmaker-Key"] = context["key"]
+
+    return StreamingResponse(zip_buf, media_type="application/zip", headers=headers)

@@ -192,8 +192,20 @@ entre onsets (con Rubber Band, preservando el tono) para que caiga ahí.
 - `style`: descripción libre del estilo (ej. "trap oscuro con hihats con
   rolls", "boom bap con swing", "reggaetón"). En español o inglés, lo que
   sea.
-- `bpm` (40-240).
+- `bpm` (40-240) **o** `reference` (archivo de audio — tu canción tal como
+  va hasta ahora). Si mandás `reference` sin `bpm`, el BPM se detecta solo.
+  Si mandás los dos, `bpm` gana pero igual se usa `reference` para sacar
+  tonalidad/duración de contexto.
+- `reference` (opcional): audio de la canción real. Se le saca tempo,
+  tonalidad estimada y duración con librosa, y ese contexto se le pasa a
+  Claude junto con `style` — así el patrón no se genera a ciegas, sabe
+  sobre qué canción va a sonar. La tonalidad es aproximada (estimación por
+  correlación de croma, puede fallar en temas con mucha ambigüedad
+  armónica).
 - `bars` (1-8, default 4).
+
+Headers de respuesta: `X-Beatmaker-Bpm` (el BPM que terminó usando) y, si
+mandaste `reference`, `X-Beatmaker-Key` (la tonalidad estimada).
 
 Devuelve un `.zip` con:
 - `pattern.mid` — el archivo para usar de verdad: arrastralo a un track de
@@ -219,6 +231,8 @@ devuelve JSON válido, se reintenta una vez antes de fallar.
   toms, crashes, percusión latina, etc.
 - El preview es una síntesis muy simple (ruido filtrado + osciladores),
   pensada para dar una idea del groove, no para usar como sonido final.
+- La tonalidad detectada del `reference` es una estimación aproximada, no
+  perfecta.
 - Necesita la misma `ANTHROPIC_API_KEY` que el asistente de chat (ver
   abajo).
 
