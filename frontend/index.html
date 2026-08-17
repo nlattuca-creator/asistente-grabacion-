@@ -7,215 +7,258 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-icon" aria-hidden="true">🎚️</span>
+      <span class="brand-name">audio-companion</span>
+    </div>
+    <button id="settings-toggle" class="icon-btn" type="button" aria-label="Configuración">⚙️</button>
+  </header>
+
+  <div id="settings-panel" class="settings-panel" hidden>
+    <label>
+      URL del backend <span class="hint-inline">(dejar vacío si esta página ya la sirve el backend)</span>
+      <input type="text" id="api_base" value="">
+    </label>
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab-btn" data-tab="tempo" type="button" role="tab">
+      <span aria-hidden="true">🎚️</span> Tempo
+    </button>
+    <button class="tab-btn" data-tab="quantize" type="button" role="tab">
+      <span aria-hidden="true">🧭</span> Cuantizar
+    </button>
+    <button class="tab-btn" data-tab="session" type="button" role="tab">
+      <span aria-hidden="true">🎛️</span> Sesión
+    </button>
+    <button class="tab-btn" data-tab="beat" type="button" role="tab">
+      <span aria-hidden="true">🥁</span> Batería
+    </button>
+  </nav>
+
   <main>
-    <h1>audio-companion</h1>
-    <p class="subtitle">Fase 1: tempo / pitch / cuantizado / batería</p>
+    <section class="tab-panel" data-tab="tempo">
+      <div class="card">
+        <h2 class="card-title">Cambiar tempo</h2>
+        <p class="card-subtitle">Estira o comprime todo el archivo parejo, preservando el tono.</p>
 
-    <h2 class="section-title">Cambiar tempo (todo el archivo parejo)</h2>
-    <form id="tempo-form">
-      <label>
-        Archivo de audio
-        <input type="file" id="file" accept="audio/*" required>
-      </label>
+        <form id="tempo-form">
+          <label>
+            Archivo de audio
+            <input type="file" id="file" accept="audio/*" required>
+          </label>
 
-      <fieldset>
-        <legend>¿Cómo definís el cambio de tempo?</legend>
-        <label class="radio">
-          <input type="radio" name="modo" value="ratio" checked>
-          Porcentaje / ratio directo
-        </label>
-        <label class="radio">
-          <input type="radio" name="modo" value="bpm">
-          BPM origen → BPM destino
-        </label>
-      </fieldset>
+          <fieldset>
+            <legend>¿Cómo definís el cambio de tempo?</legend>
+            <label class="radio">
+              <input type="radio" name="modo" value="ratio" checked>
+              Porcentaje / ratio directo
+            </label>
+            <label class="radio">
+              <input type="radio" name="modo" value="bpm">
+              BPM origen → BPM destino
+            </label>
+          </fieldset>
 
-      <div id="modo-ratio" class="modo-fields">
-        <label>
-          Ratio de tempo (1.0 = igual, 1.15 = 15% más rápido, 0.9 = 10% más lento)
-          <input type="number" id="tempo_ratio" step="0.01" min="0.25" max="4" value="1.0">
-        </label>
+          <div id="modo-ratio" class="modo-fields">
+            <label>
+              Ratio de tempo (1.0 = igual, 1.15 = 15% más rápido, 0.9 = 10% más lento)
+              <input type="number" id="tempo_ratio" step="0.01" min="0.25" max="4" value="1.0">
+            </label>
+          </div>
+
+          <div id="modo-bpm" class="modo-fields" hidden>
+            <label>
+              BPM original
+              <span class="bpm-detect-row">
+                <input type="number" id="bpm_from" step="0.1" min="1">
+                <button type="button" id="detect-bpm-btn">Detectar automáticamente</button>
+              </span>
+            </label>
+            <p id="detect-bpm-status" class="hint"></p>
+            <label>
+              BPM destino
+              <input type="number" id="bpm_to" step="0.1" min="1">
+            </label>
+          </div>
+
+          <label>
+            Formato de salida
+            <select id="output_format">
+              <option value="wav">WAV (sin pérdida)</option>
+              <option value="mp3">MP3</option>
+            </select>
+          </label>
+
+          <button type="submit" id="submit-btn" class="btn-primary">Procesar</button>
+        </form>
+
+        <div class="result-area">
+          <p id="status" class="status-line"></p>
+          <audio id="result-player" controls hidden></audio>
+          <a id="result-download" hidden download>Descargar resultado</a>
+        </div>
       </div>
+    </section>
 
-      <div id="modo-bpm" class="modo-fields" hidden>
-        <label>
-          BPM original
-          <span class="bpm-detect-row">
-            <input type="number" id="bpm_from" step="0.1" min="1">
-            <button type="button" id="detect-bpm-btn">Detectar automáticamente</button>
-          </span>
-        </label>
-        <p id="detect-bpm-status" class="hint"></p>
-        <label>
-          BPM destino
-          <input type="number" id="bpm_to" step="0.1" min="1">
-        </label>
+    <section class="tab-panel" data-tab="quantize" hidden>
+      <div class="card">
+        <h2 class="card-title">Cuantizar</h2>
+        <p class="card-subtitle">
+          Subís el instrumento que marca el tempo (ej. piano) y la pista a
+          alinear (ej. voz). Cada ataque de la pista a alinear se estira o
+          comprime individualmente para caer en la grilla rítmica del
+          instrumento de referencia — no es solo cambiar el tempo parejo.
+        </p>
+
+        <form id="quantize-form">
+          <label>
+            Audio de referencia (marca el tempo, ej. piano)
+            <input type="file" id="q-reference" accept="audio/*" required>
+          </label>
+
+          <label>
+            Audio a alinear (ej. voz)
+            <input type="file" id="q-target" accept="audio/*" required>
+          </label>
+
+          <label>
+            Subdivisión de la grilla
+            <select id="q-subdivision">
+              <option value="1">Negras (por beat)</option>
+              <option value="2">Corcheas (1/8)</option>
+              <option value="4" selected>Semicorcheas (1/16)</option>
+              <option value="8">Fusas (1/32)</option>
+            </select>
+          </label>
+
+          <label>
+            Fuerza del cuantizado: <span id="q-strength-value">100%</span>
+            <input type="range" id="q-strength" min="0" max="100" step="5" value="100">
+          </label>
+
+          <label>
+            Formato de salida
+            <select id="q-output_format">
+              <option value="wav">WAV (sin pérdida)</option>
+              <option value="mp3">MP3</option>
+            </select>
+          </label>
+
+          <button type="submit" id="q-submit-btn" class="btn-primary">Cuantizar</button>
+        </form>
+
+        <div class="result-area">
+          <p id="q-status" class="status-line"></p>
+          <audio id="q-result-player" controls hidden></audio>
+          <a id="q-result-download" hidden download>Descargar resultado</a>
+        </div>
       </div>
+    </section>
 
-      <label>
-        Formato de salida
-        <select id="output_format">
-          <option value="wav">WAV (sin pérdida)</option>
-          <option value="mp3">MP3</option>
-        </select>
-      </label>
+    <section class="tab-panel" data-tab="session" hidden>
+      <div class="card">
+        <h2 class="card-title">Sesión multi-pista</h2>
+        <p class="card-subtitle">
+          Lo mismo que "Cuantizar", pero para toda la sesión de una: subís
+          el instrumento de referencia (ej. piano) y todas las pistas que
+          quieras alinear a la vez (ej. guitarra + voz), y bajás un ZIP con
+          todas ya arregladas para reimportar juntas a Logic.
+        </p>
 
-      <label>
-        URL del backend (dejar vacío si esta página ya la sirve el backend)
-        <input type="text" id="api_base" value="">
-      </label>
+        <form id="session-form">
+          <label>
+            Audio de referencia (marca el tempo, ej. piano)
+            <input type="file" id="s-reference" accept="audio/*" required>
+          </label>
 
-      <button type="submit" id="submit-btn">Procesar</button>
-    </form>
+          <label>
+            Pistas a alinear (ej. guitarra + voz — elegí varias a la vez con Cmd/Ctrl+click)
+            <input type="file" id="s-targets" accept="audio/*" multiple required>
+          </label>
+          <p id="s-targets-status" class="hint"></p>
 
-    <p id="status"></p>
-    <audio id="result-player" controls hidden></audio>
-    <a id="result-download" hidden download>Descargar resultado</a>
+          <label>
+            Subdivisión de la grilla
+            <select id="s-subdivision">
+              <option value="1">Negras (por beat)</option>
+              <option value="2">Corcheas (1/8)</option>
+              <option value="4" selected>Semicorcheas (1/16)</option>
+              <option value="8">Fusas (1/32)</option>
+            </select>
+          </label>
 
-    <hr class="divider">
+          <label>
+            Fuerza del cuantizado: <span id="s-strength-value">100%</span>
+            <input type="range" id="s-strength" min="0" max="100" step="5" value="100">
+          </label>
 
-    <h2 class="section-title">Cuantizar (alinear voz a otro instrumento)</h2>
-    <p class="subtitle">
-      Subís el instrumento que marca el tempo (ej. piano) y la pista a
-      alinear (ej. voz). Cada ataque de la pista a alinear se estira o
-      comprime individualmente para caer en la grilla rítmica del
-      instrumento de referencia — no es solo cambiar el tempo parejo.
-    </p>
+          <label>
+            Formato de salida
+            <select id="s-output_format">
+              <option value="wav">WAV (sin pérdida)</option>
+              <option value="mp3">MP3</option>
+            </select>
+          </label>
 
-    <form id="quantize-form">
-      <label>
-        Audio de referencia (marca el tempo, ej. piano)
-        <input type="file" id="q-reference" accept="audio/*" required>
-      </label>
+          <button type="submit" id="s-submit-btn" class="btn-primary">Alinear sesión</button>
+        </form>
 
-      <label>
-        Audio a alinear (ej. voz)
-        <input type="file" id="q-target" accept="audio/*" required>
-      </label>
+        <div class="result-area">
+          <p id="s-status" class="status-line"></p>
+          <div id="s-results"></div>
+          <a id="s-result-download" hidden download>Descargar ZIP de la sesión</a>
+        </div>
+      </div>
+    </section>
 
-      <label>
-        Subdivisión de la grilla
-        <select id="q-subdivision">
-          <option value="1">Negras (por beat)</option>
-          <option value="2">Corcheas (1/8)</option>
-          <option value="4" selected>Semicorcheas (1/16)</option>
-          <option value="8">Fusas (1/32)</option>
-        </select>
-      </label>
+    <section class="tab-panel" data-tab="beat" hidden>
+      <div class="card">
+        <h2 class="card-title">Crear batería</h2>
+        <p class="card-subtitle">
+          Describí el estilo y (recomendado) subí la canción tal como va
+          hasta ahora — así Claude no genera el patrón a ciegas: le
+          sacamos tempo, tonalidad aproximada y duración del audio real
+          antes de pedirle la batería. Te devuelve un ZIP con un MIDI
+          (para arrastrar a Drummer o a tu kit en Logic y usar tus propios
+          sonidos — ese es el archivo que realmente vas a usar) y un
+          preview en audio sintetizado acá mismo, solo para escuchar la
+          idea rápido.
+        </p>
 
-      <label>
-        Fuerza del cuantizado: <span id="q-strength-value">100%</span>
-        <input type="range" id="q-strength" min="0" max="100" step="5" value="100">
-      </label>
+        <form id="beat-form">
+          <label>
+            Canción de referencia (opcional, pero recomendado)
+            <input type="file" id="b-reference" accept="audio/*">
+          </label>
+          <p id="b-reference-status" class="hint"></p>
 
-      <label>
-        Formato de salida
-        <select id="q-output_format">
-          <option value="wav">WAV (sin pérdida)</option>
-          <option value="mp3">MP3</option>
-        </select>
-      </label>
+          <label>
+            Estilo (texto libre)
+            <textarea id="b-style" rows="3" placeholder="ej: trap oscuro con hihats con rolls, o boom bap con swing y kick sincopado" required></textarea>
+          </label>
 
-      <button type="submit" id="q-submit-btn">Cuantizar</button>
-    </form>
+          <label>
+            BPM (se completa solo si subiste una canción de referencia; corregilo si hace falta)
+            <input type="number" id="b-bpm" step="0.1" min="40" max="240">
+          </label>
 
-    <p id="q-status"></p>
-    <audio id="q-result-player" controls hidden></audio>
-    <a id="q-result-download" hidden download>Descargar resultado</a>
+          <label>
+            Compases
+            <input type="number" id="b-bars" min="1" max="8" value="4">
+          </label>
 
-    <hr class="divider">
+          <button type="submit" id="b-submit-btn" class="btn-primary">Generar batería</button>
+        </form>
 
-    <h2 class="section-title">Sesión multi-pista</h2>
-    <p class="subtitle">
-      Lo mismo que "Cuantizar" de arriba, pero para toda la sesión de una:
-      subís el instrumento de referencia (ej. piano) y todas las pistas que
-      quieras alinear a la vez (ej. guitarra + voz), y bajás un ZIP con
-      todas ya arregladas para reimportar juntas a Logic.
-    </p>
-
-    <form id="session-form">
-      <label>
-        Audio de referencia (marca el tempo, ej. piano)
-        <input type="file" id="s-reference" accept="audio/*" required>
-      </label>
-
-      <label>
-        Pistas a alinear (ej. guitarra + voz — elegí varias a la vez con Cmd/Ctrl+click)
-        <input type="file" id="s-targets" accept="audio/*" multiple required>
-      </label>
-      <p id="s-targets-status" class="hint"></p>
-
-      <label>
-        Subdivisión de la grilla
-        <select id="s-subdivision">
-          <option value="1">Negras (por beat)</option>
-          <option value="2">Corcheas (1/8)</option>
-          <option value="4" selected>Semicorcheas (1/16)</option>
-          <option value="8">Fusas (1/32)</option>
-        </select>
-      </label>
-
-      <label>
-        Fuerza del cuantizado: <span id="s-strength-value">100%</span>
-        <input type="range" id="s-strength" min="0" max="100" step="5" value="100">
-      </label>
-
-      <label>
-        Formato de salida
-        <select id="s-output_format">
-          <option value="wav">WAV (sin pérdida)</option>
-          <option value="mp3">MP3</option>
-        </select>
-      </label>
-
-      <button type="submit" id="s-submit-btn">Alinear sesión</button>
-    </form>
-
-    <p id="s-status"></p>
-    <div id="s-results"></div>
-    <a id="s-result-download" hidden download>Descargar ZIP de la sesión</a>
-
-    <hr class="divider">
-
-    <h2 class="section-title">Crear batería</h2>
-    <p class="subtitle">
-      Describí el estilo y (recomendado) subí la canción tal como va hasta
-      ahora — así Claude no genera el patrón a ciegas: le sacamos tempo,
-      tonalidad aproximada y duración del audio real antes de pedirle la
-      batería. Te devuelve un ZIP con un MIDI (para arrastrar a Drummer o a
-      tu kit en Logic y usar tus propios sonidos — ese es el archivo que
-      realmente vas a usar) y un preview en audio sintetizado acá mismo,
-      solo para escuchar la idea rápido.
-    </p>
-
-    <form id="beat-form">
-      <label>
-        Canción de referencia (opcional, pero recomendado)
-        <input type="file" id="b-reference" accept="audio/*">
-      </label>
-      <p id="b-reference-status" class="hint"></p>
-
-      <label>
-        Estilo (texto libre)
-        <textarea id="b-style" rows="3" placeholder="ej: trap oscuro con hihats con rolls, o boom bap con swing y kick sincopado" required></textarea>
-      </label>
-
-      <label>
-        BPM (se completa solo si subiste una canción de referencia; corregilo si hace falta)
-        <input type="number" id="b-bpm" step="0.1" min="40" max="240">
-      </label>
-
-      <label>
-        Compases
-        <input type="number" id="b-bars" min="1" max="8" value="4">
-      </label>
-
-      <button type="submit" id="b-submit-btn">Generar batería</button>
-    </form>
-
-    <p id="b-status"></p>
-    <audio id="b-result-player" controls hidden></audio>
-    <a id="b-result-download" hidden download>Descargar ZIP (MIDI + preview)</a>
+        <div class="result-area">
+          <p id="b-status" class="status-line"></p>
+          <audio id="b-result-player" controls hidden></audio>
+          <a id="b-result-download" hidden download>Descargar ZIP (MIDI + preview)</a>
+        </div>
+      </div>
+    </section>
   </main>
 
   <button id="chat-toggle" aria-label="Abrir asistente">💬</button>
@@ -232,6 +275,7 @@
     </form>
   </div>
 
+  <script src="tabs.js"></script>
   <script src="app.js"></script>
   <script src="quantize.js"></script>
   <script src="zip-lite.js"></script>

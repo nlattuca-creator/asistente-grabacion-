@@ -48,6 +48,18 @@ La arquitectura (backend Python separado del frontend) está pensada desde el
 día 1 para soportar las tres fases sin reescribir nada: cada módulo nuevo es
 un router más en `backend/app/modules/`.
 
+**UI (rediseñada):** navegación por pestañas (Tempo / Cuantizar / Sesión /
+Batería) en vez de todo apilado en una sola página larga, con identidad
+visual propia (tarjetas, tipografía, botones) en vez de formularios grises
+genéricos. La URL del backend (para dev local con `file://`) se movió a un
+panel de configuración (⚙️) en el header, ya no vive dentro del formulario
+de Tempo.
+
+**Pendiente / próxima fase grande:** vista de waveform en "Cuantizar" y
+"Sesión" para ver el audio original vs. el resultado, con los puntos donde
+la IA alineó cada ataque, y poder arrastrarlos a mano para corregir (tipo
+Flex Time de Logic) en vez de solo aceptar el resultado a ciegas.
+
 ## Arquitectura
 
 ```
