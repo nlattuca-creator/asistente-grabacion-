@@ -11,10 +11,26 @@ const qWaveTarget = document.getElementById("q-wave-target");
 const qWaveTargetTrack = document.getElementById("q-wave-target-track");
 const qResetBtn = document.getElementById("q-reset-btn");
 const qApplyBtn = document.getElementById("q-apply-btn");
+const qReferencePreview = document.getElementById("q-reference-preview");
+const qTargetPreview = document.getElementById("q-target-preview");
 
 qStrengthInput.addEventListener("input", () => {
   qStrengthValue.textContent = `${qStrengthInput.value}%`;
 });
+
+function previewFile(input, player) {
+  input.addEventListener("change", () => {
+    const file = input.files[0];
+    if (!file) {
+      player.hidden = true;
+      return;
+    }
+    player.src = URL.createObjectURL(file);
+    player.hidden = false;
+  });
+}
+previewFile(document.getElementById("q-reference"), qReferencePreview);
+previewFile(document.getElementById("q-target"), qTargetPreview);
 
 // Estado del editor de la sesión de análisis actual.
 let qCurrentEvents = []; // [{origTime, suggestedTime, targetTime}]
@@ -80,17 +96,27 @@ async function renderEditor(referenceFile, targetFile, grid) {
   // de 1px si lo medíamos con el editor todavía oculto.
   qEditor.hidden = false;
 
-  const targetWidth = Math.max(300, qWaveTargetTrack.clientWidth || 600);
+  const containerWidth = Math.max(300, qWaveTargetTrack.clientWidth || 600);
 
   const [refPeaks, targetPeaks] = await Promise.all([
-    decodeAudioPeaks(referenceFile, targetWidth),
-    decodeAudioPeaks(targetFile, targetWidth),
+    decodeAudioPeaks(referenceFile, containerWidth),
+    decodeAudioPeaks(targetFile, containerWidth),
   ]);
 
-  drawWaveform(qWaveReference, refPeaks.peaks, "#7c9eff");
+  // Las dos waveforms comparten la misma escala tiempo->píxel, así el
+  // mismo instante cae en la misma posición horizontal en ambas — si no,
+  // cada una ocupa el 100% de su contenedor sin importar cuánto dura, y
+  // no se puede juzgar a simple vista si algo cae alineado o no.
+  const sharedDuration = Math.max(refPeaks.duration, targetPeaks.duration, 0.001);
+  const pxPerSecond = containerWidth / sharedDuration;
+  const refWidth = Math.max(1, Math.round(refPeaks.duration * pxPerSecond));
+  const targetWidth = Math.max(1, Math.round(targetPeaks.duration * pxPerSecond));
+
+  drawWaveform(qWaveReference, refPeaks.peaks, "#7c9eff", refWidth);
   drawTicks(qWaveReference, grid, refPeaks.duration, "rgba(255,255,255,0.25)", 1);
 
-  drawWaveform(qWaveTarget, targetPeaks.peaks, "#6fd48c");
+  qWaveTargetTrack.style.width = `${targetWidth}px`;
+  drawWaveform(qWaveTarget, targetPeaks.peaks, "#6fd48c", targetWidth);
   drawTicks(
     qWaveTarget,
     qCurrentEvents.map((ev) => ev.origTime),
@@ -101,6 +127,9 @@ async function renderEditor(referenceFile, targetFile, grid) {
 
   qWaveTargetTrack.querySelectorAll(".wave-marker").forEach((el) => el.remove());
   qMarkerTrack = createMarkerTrack(qWaveTargetTrack, qCurrentEvents, qCurrentDuration, () => {});
+
+  attachSeekOnClick(qWaveReference, qReferencePreview, refPeaks.duration);
+  attachSeekOnClick(qWaveTargetTrack, qTargetPreview, qCurrentDuration);
 }
 
 qResetBtn.addEventListener("click", () => {

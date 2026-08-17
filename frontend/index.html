@@ -117,11 +117,13 @@
             Audio de referencia (marca el tempo, ej. piano)
             <input type="file" id="q-reference" accept="audio/*" required>
           </label>
+          <audio id="q-reference-preview" controls hidden></audio>
 
           <label>
             Audio a alinear (ej. voz)
             <input type="file" id="q-target" accept="audio/*" required>
           </label>
+          <audio id="q-target-preview" controls hidden></audio>
 
           <label>
             Subdivisión de la grilla
@@ -151,9 +153,12 @@
 
         <div id="q-editor" class="wave-editor" hidden>
           <p class="hint">
-            Arrastrá los puntos para corregir dónde cae cada ataque. La
-            marca finita gris es dónde estaba originalmente; el punto
-            arrastrable es a dónde se lo mueve.
+            Hacé clic en cualquier parte de una waveform para escucharla
+            desde ahí. Arrastrá los puntos de color para corregir dónde
+            cae cada ataque — la marca finita gris es dónde estaba
+            originalmente. Las dos waveforms usan la misma escala de
+            tiempo, así que si algo cae en la misma posición horizontal
+            en las dos, está alineado.
           </p>
 
           <div class="waveform-panel">
@@ -197,6 +202,7 @@
             Audio de referencia (marca el tempo, ej. piano)
             <input type="file" id="s-reference" accept="audio/*" required>
           </label>
+          <audio id="s-reference-preview" controls hidden></audio>
 
           <label>
             Pistas a alinear (ej. guitarra + voz — elegí varias a la vez con Cmd/Ctrl+click)
@@ -232,9 +238,12 @@
 
         <div id="s-editor" class="wave-editor" hidden>
           <p class="hint">
-            Arrastrá los puntos de cada pista para corregir dónde cae cada
-            ataque. La marca finita gris es dónde estaba originalmente; el
-            punto arrastrable es a dónde se lo mueve.
+            Hacé clic en cualquier parte de una waveform para escucharla
+            desde ahí. Arrastrá los puntos de color para corregir dónde
+            cae cada ataque — la marca finita gris es dónde estaba
+            originalmente. Todas las waveforms (referencia + cada pista)
+            usan la misma escala de tiempo, así que si algo cae en la
+            misma posición horizontal en todas, está alineado.
           </p>
 
           <div class="waveform-panel">

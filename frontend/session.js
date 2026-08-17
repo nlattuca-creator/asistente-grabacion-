@@ -12,9 +12,20 @@ const sWaveReference = document.getElementById("s-wave-reference");
 const sTracksContainer = document.getElementById("s-tracks-container");
 const sResetBtn = document.getElementById("s-reset-btn");
 const sApplyBtn = document.getElementById("s-apply-btn");
+const sReferencePreview = document.getElementById("s-reference-preview");
 
 sStrengthInput.addEventListener("input", () => {
   sStrengthValue.textContent = `${sStrengthInput.value}%`;
+});
+
+document.getElementById("s-reference").addEventListener("change", () => {
+  const file = document.getElementById("s-reference").files[0];
+  if (!file) {
+    sReferencePreview.hidden = true;
+    return;
+  }
+  sReferencePreview.src = URL.createObjectURL(file);
+  sReferencePreview.hidden = false;
 });
 
 sTargetsInput.addEventListener("change", () => {
@@ -96,9 +107,27 @@ async function renderSessionEditor(referenceFile, grid, referenceBpm) {
   // Mostrar antes de medir/dibujar (un contenedor hidden mide ancho 0).
   sEditor.hidden = false;
 
-  const refWidth = Math.max(300, sWaveReference.parentElement.clientWidth || 600);
-  const refPeaks = await decodeAudioPeaks(referenceFile, refWidth);
-  drawWaveform(sWaveReference, refPeaks.peaks, "#7c9eff");
+  const containerWidth = Math.max(300, sWaveReference.parentElement.clientWidth || 600);
+
+  // Decodificar todo primero para saber la duración de cada una, y recién
+  // ahí definir una escala tiempo->píxel compartida por todas — si cada
+  // waveform ocupa el 100% de su contenedor sin importar cuánto dura, no
+  // se puede juzgar a simple vista si algo cae alineado entre pistas.
+  const refPeaks = await decodeAudioPeaks(referenceFile, containerWidth);
+  const trackPeaksList = [];
+  for (const track of sTracksState) {
+    trackPeaksList.push(await decodeAudioPeaks(track.file, containerWidth));
+  }
+
+  const sharedDuration = Math.max(
+    refPeaks.duration,
+    ...trackPeaksList.map((p) => p.duration),
+    0.001,
+  );
+  const pxPerSecond = containerWidth / sharedDuration;
+
+  const refWidth = Math.max(1, Math.round(refPeaks.duration * pxPerSecond));
+  drawWaveform(sWaveReference, refPeaks.peaks, "#7c9eff", refWidth);
   drawTicks(sWaveReference, grid, refPeaks.duration, "rgba(255,255,255,0.25)", 1);
 
   const refPanel = sWaveReference.closest(".waveform-panel");
@@ -110,9 +139,15 @@ async function renderSessionEditor(referenceFile, grid, referenceBpm) {
   }
   refBpmLine.textContent = `${referenceBpm} BPM detectado`;
 
+  const refPreview = document.getElementById("s-reference-preview");
+  attachSeekOnClick(sWaveReference, refPreview, refPeaks.duration);
+
   sTracksContainer.innerHTML = "";
 
-  for (const track of sTracksState) {
+  sTracksState.forEach((track, index) => {
+    const peaks = trackPeaksList[index];
+    const trackWidth = Math.max(1, Math.round(peaks.duration * pxPerSecond));
+
     const panel = document.createElement("div");
     panel.className = "waveform-panel";
 
@@ -128,20 +163,25 @@ async function renderSessionEditor(referenceFile, grid, referenceBpm) {
 
     const waveTrack = document.createElement("div");
     waveTrack.className = "wave-track";
+    waveTrack.style.width = `${trackWidth}px`;
     const canvas = document.createElement("canvas");
     canvas.dataset.height = "90";
     waveTrack.appendChild(canvas);
     panel.appendChild(waveTrack);
 
+    const player = document.createElement("audio");
+    player.controls = true;
+    player.src = URL.createObjectURL(track.file);
+    panel.appendChild(player);
+
     sTracksContainer.appendChild(panel);
 
-    const trackWidth = Math.max(300, waveTrack.clientWidth || 600);
-    const peaks = await decodeAudioPeaks(track.file, trackWidth);
-    drawWaveform(canvas, peaks.peaks, "#6fd48c");
+    drawWaveform(canvas, peaks.peaks, "#6fd48c", trackWidth);
     drawTicks(canvas, track.events.map((ev) => ev.origTime), track.duration, "rgba(255,255,255,0.4)", 2);
 
     track.markerTrack = createMarkerTrack(waveTrack, track.events, track.duration, () => {});
-  }
+    attachSeekOnClick(waveTrack, player, track.duration);
+  });
 }
 
 sResetBtn.addEventListener("click", () => {

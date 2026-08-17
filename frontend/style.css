@@ -313,14 +313,18 @@ button:disabled { opacity: 0.55; cursor: wait; }
 .wave-editor canvas {
   display: block;
   width: 100%;
+  max-width: 100%;
   border-radius: var(--radius-sm);
   background: var(--field-bg);
   border: 1px solid var(--border);
+  cursor: pointer;
 }
 
 .wave-track {
   position: relative;
   touch-action: none;
+  cursor: pointer;
+  max-width: 100%;
 }
 
 .wave-marker {
