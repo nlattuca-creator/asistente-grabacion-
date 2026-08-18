@@ -93,6 +93,7 @@ audio-companion/
     session.js             lógica de "Sesión": igual pero con N pistas a la vez
     beatmaker.js           lógica del formulario de batería
     zip-lite.js             extrae una entrada de un ZIP sin comprimir (para los previews)
+    mix.js                mezcla referencia + resultado en el browser, solo para escuchar (nunca se descarga)
     chat.js               lógica del panel de chat flotante
     style.css
 ```
@@ -212,7 +213,25 @@ mano (con el mouse, `pointer events`) antes de aplicar nada.
 mano), `output_format`. Renderiza y devuelve el audio final, con los
 mismos headers `X-Quantize-Segments`/`X-Quantize-Clamped` que `/align`.
 No necesita `reference` de nuevo — los tiempos finales ya vienen
-decididos.
+decididos. **Esto es el stem — la pista corregida sola, lista para
+reimportar a su propio track en Logic.** Nunca se mezcla con nada del
+lado del server.
+
+**Escuchar antes de confiar (todo client-side, no pasa por el server):**
+- Apenas elegís cada archivo (`reference`/`target`), aparece un
+  reproductor con el audio tal cual lo subiste — antes de analizar nada.
+- Con el análisis hecho, un clic en cualquier parte de una waveform
+  reproduce el audio real desde ese punto exacto (`attachSeekOnClick` en
+  `waveform.js`), para poder chequear de oído qué hay en cada ataque
+  detectado sin depender solo del dibujo.
+- Después de aplicar, el resultado del stem se **mezcla en el browser**
+  con el `reference` original (`mix.js`, `Web Audio API`, `OfflineAudioContext`)
+  y esa mezcla es lo que suena por default al apretar play — así se
+  juzga de oído si la corrección quedó en tiempo *contra lo que la tiene
+  que acompañar*, no escuchando la pista corregida aislada (que por sí
+  sola no dice si está en tiempo o no). La mezcla es un WAV generado al
+  vuelo, nunca se guarda ni se ofrece para descargar — lo único
+  descargable sigue siendo el stem solo.
 
 ### Endpoint directo (sin edición manual)
 

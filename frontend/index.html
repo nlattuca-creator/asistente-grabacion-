@@ -181,8 +181,13 @@
 
         <div class="result-area">
           <p id="q-status" class="status-line"></p>
+
+          <p class="waveform-label" id="q-mix-label" hidden>Mezcla: referencia + pista corregida (así juzgás si quedó en tiempo)</p>
+          <audio id="q-mix-player" controls hidden></audio>
+
+          <p class="waveform-label" id="q-isolated-label" hidden>Solo la pista corregida, sin mezclar</p>
           <audio id="q-result-player" controls hidden></audio>
-          <a id="q-result-download" hidden download>Descargar resultado</a>
+          <a id="q-result-download" hidden download>Descargar pista corregida (para Logic)</a>
         </div>
       </div>
     </section>
@@ -332,6 +337,7 @@
   <script src="tabs.js"></script>
   <script src="app.js"></script>
   <script src="waveform.js"></script>
+  <script src="mix.js"></script>
   <script src="quantize.js"></script>
   <script src="zip-lite.js"></script>
   <script src="session.js"></script>

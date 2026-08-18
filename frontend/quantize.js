@@ -13,6 +13,9 @@ const qResetBtn = document.getElementById("q-reset-btn");
 const qApplyBtn = document.getElementById("q-apply-btn");
 const qReferencePreview = document.getElementById("q-reference-preview");
 const qTargetPreview = document.getElementById("q-target-preview");
+const qMixPlayer = document.getElementById("q-mix-player");
+const qMixLabel = document.getElementById("q-mix-label");
+const qIsolatedLabel = document.getElementById("q-isolated-label");
 
 qStrengthInput.addEventListener("input", () => {
   qStrengthValue.textContent = `${qStrengthInput.value}%`;
@@ -35,6 +38,7 @@ previewFile(document.getElementById("q-target"), qTargetPreview);
 // Estado del editor de la sesión de análisis actual.
 let qCurrentEvents = []; // [{origTime, suggestedTime, targetTime}]
 let qCurrentDuration = 0;
+let qCurrentReferenceFile = null;
 let qCurrentTargetFile = null;
 let qMarkerTrack = null;
 
@@ -71,6 +75,7 @@ qForm.addEventListener("submit", async (event) => {
     if (!response.ok) throw new Error(data.detail || `Error ${response.status}`);
 
     qCurrentDuration = data.duration;
+    qCurrentReferenceFile = reference;
     qCurrentTargetFile = target;
     qCurrentEvents = data.events.map((ev) => ({
       origTime: ev.orig_time,
@@ -155,6 +160,9 @@ qApplyBtn.addEventListener("click", async () => {
   qStatus.textContent = "Aplicando…";
   qPlayer.hidden = true;
   qDownloadLink.hidden = true;
+  qMixPlayer.hidden = true;
+  qMixLabel.hidden = true;
+  qIsolatedLabel.hidden = true;
 
   try {
     const response = await fetch(`${apiBase()}/api/quantize/render`, {
@@ -170,8 +178,13 @@ qApplyBtn.addEventListener("click", async () => {
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
 
+    // El archivo que se baja/reproduce aislado es siempre la pista sola
+    // (el stem, para reimportar a Logic) — la mezcla es solo para
+    // escuchar acá y juzgar si quedó en tiempo, nunca se guarda ni
+    // reemplaza al stem.
     qPlayer.src = url;
     qPlayer.hidden = false;
+    qIsolatedLabel.hidden = false;
 
     const disposition = response.headers.get("content-disposition") || "";
     const match = disposition.match(/filename="?([^"]+)"?/);
@@ -185,7 +198,17 @@ qApplyBtn.addEventListener("click", async () => {
     if (clamped && Number(clamped) > 0) {
       msg += ` ${clamped} necesitaban un estiramiento tan extremo que se limitó (para no destruir el audio).`;
     }
-    qStatus.textContent = msg;
+    qStatus.textContent = `${msg} Armando la mezcla para escuchar…`;
+
+    try {
+      const mixBlob = await mixReferenceWithResult(qCurrentReferenceFile, blob);
+      qMixPlayer.src = URL.createObjectURL(mixBlob);
+      qMixPlayer.hidden = false;
+      qMixLabel.hidden = false;
+      qStatus.textContent = `${msg} Escuchá la mezcla de arriba para juzgar si quedó en tiempo con la referencia.`;
+    } catch (mixErr) {
+      qStatus.textContent = `${msg} (no pude armar la mezcla de preview: ${mixErr.message})`;
+    }
   } catch (err) {
     qStatus.textContent = `Error: ${err.message}`;
   } finally {

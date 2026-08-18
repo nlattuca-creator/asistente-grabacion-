@@ -42,6 +42,7 @@ function sApiBase() {
 // Estado del análisis actual: un objeto por pista, en el mismo orden que
 // los archivos subidos.
 let sTracksState = []; // [{file, duration, events: [{origTime, suggestedTime, targetTime}], markerTrack}]
+let sCurrentReferenceFile = null;
 
 sessionForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -70,6 +71,7 @@ sessionForm.addEventListener("submit", async (event) => {
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || `Error ${response.status}`);
 
+    sCurrentReferenceFile = reference;
     sTracksState = data.tracks.map((track, index) => ({
       file: targets[index],
       duration: track.duration,
@@ -235,26 +237,46 @@ sApplyBtn.addEventListener("click", async () => {
     }
 
     for (const entry of report) {
+      const row = document.createElement("div");
+      row.className = "session-track";
+      sResults.appendChild(row);
+
       try {
         const wavBytes = extractStoredZipEntry(zipBuffer, entry.file);
         const mime = entry.file.endsWith(".mp3") ? "audio/mpeg" : "audio/wav";
-        const wavUrl = URL.createObjectURL(new Blob([wavBytes], { type: mime }));
+        const resultBlob = new Blob([wavBytes], { type: mime });
 
-        const row = document.createElement("div");
-        row.className = "session-track";
         const rowLabel = document.createElement("p");
         rowLabel.textContent = `${entry.file} — ${entry.segments} segmentos` +
           (entry.clamped > 0 ? ` (${entry.clamped} limitados por estiramiento extremo)` : "");
-        const player = document.createElement("audio");
-        player.controls = true;
-        player.src = wavUrl;
         row.appendChild(rowLabel);
-        row.appendChild(player);
-        sResults.appendChild(row);
+
+        const mixLabel = document.createElement("p");
+        mixLabel.className = "hint";
+        mixLabel.textContent = "Mezcla con la referencia (para juzgar si quedó en tiempo) — armando…";
+        row.appendChild(mixLabel);
+        const mixPlayer = document.createElement("audio");
+        mixPlayer.controls = true;
+        row.appendChild(mixPlayer);
+
+        const isolatedLabel = document.createElement("p");
+        isolatedLabel.className = "hint";
+        isolatedLabel.textContent = "Solo esta pista, sin mezclar (esto es lo que baja el ZIP):";
+        row.appendChild(isolatedLabel);
+        const isolatedPlayer = document.createElement("audio");
+        isolatedPlayer.controls = true;
+        isolatedPlayer.src = URL.createObjectURL(resultBlob);
+        row.appendChild(isolatedPlayer);
+
+        try {
+          const mixBlob = await mixReferenceWithResult(sCurrentReferenceFile, resultBlob);
+          mixPlayer.src = URL.createObjectURL(mixBlob);
+          mixLabel.textContent = "Mezcla con la referencia (para juzgar si quedó en tiempo):";
+        } catch (mixErr) {
+          mixLabel.textContent = `No pude armar la mezcla de preview (${mixErr.message}).`;
+        }
       } catch (entryErr) {
-        const row = document.createElement("p");
         row.textContent = `${entry.file}: no se pudo cargar el preview (${entryErr.message})`;
-        sResults.appendChild(row);
       }
     }
 
